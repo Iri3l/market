@@ -1,0 +1,23 @@
+# .github/workflows/deploy-eb.yml
+name: Deploy to EB
+on: [push]
+permissions: { id-token: write, contents: read }
+jobs:
+  deploy:
+    if: ${{ secrets.AWS_ROLE_ARN && secrets.AWS_REGION }}   # stays inert until you add secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - run: npm ci
+      - run: zip -r artifact.zip . -x "node_modules/*" ".git/*"
+      - uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          application_name: marketplace-hello
+          environment_name: marketplace-hello-env
+          region: ${{ secrets.AWS_REGION }}
+          version_label: v-${{ github.run_number }}
+          deployment_package: artifact.zip
