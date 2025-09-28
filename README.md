@@ -14,6 +14,13 @@
 
 ## Development
 See `api/README.md` for local API instructions.
+## Local endpoints
+- `GET /` — simple status page
+- `GET /health` — healthcheck
+- `GET /api/listings` — list listings (supports filters)
+- `POST /api/auth/register` — register
+- `POST /api/auth/login` — login (returns JWT)
+
 
 ## Roadmap
 See `docs/roadmap.md`.
