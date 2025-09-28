@@ -18,3 +18,4 @@ dist/
 
 # AWS test dirs
 api/s3/
+api._backup/
