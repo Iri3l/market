@@ -1,4 +1,4 @@
-# MARKET — Autotrader-style marketplace (WIP)
+# MARKET IDEA — marketplace (WIP)
 
 **Goal:** allow people to list and browse cars/parts (no payments initially).
 
