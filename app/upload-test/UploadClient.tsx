@@ -103,24 +103,40 @@ export default function UploadClient() {
       <p className="text-sm">{status}</p>
 
       {previewUrl && (
-        <div className="mt-3">
-          <div className="text-sm mb-2">Preview link (expires in ~5 min):</div>
-          <a className="underline break-all" href={previewUrl} target="_blank" rel="noreferrer">
-            {previewUrl}
-          </a>
+  <div className="mt-3">
+    <div className="text-sm mb-2">Preview link (expires in ~5 min):</div>
 
-          {isImage && (
-            <div className="mt-3">
-              <img
-                src={previewUrl}
-                alt="Uploaded preview"
-                className="rounded-md"
-                style={{ maxWidth: 600, width: "100%", maxHeight: 380, objectFit: "contain", border: "1px solid #eee" }}
-              />
-            </div>
-          )}
-        </div>
-      )}
+    {/* Hide the long URL behind readable link text */}
+    <a
+      className="underline"
+      href={previewUrl}
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Open preview of uploaded file in a new tab"
+    >
+      Open preview
+    </a>
+
+    {isImage && (
+      <div className="mt-3">
+        <img
+          src={previewUrl}
+          alt="Uploaded preview"
+          className="rounded-md"
+          style={{
+            maxWidth: 600,
+            width: "100%",
+            maxHeight: 380,
+            objectFit: "contain",
+            border: "1px solid #eee",
+          }}
+        />
+      </div>
+    )}
+  </div>
+)}
+
     </div>
   );
 }
+
