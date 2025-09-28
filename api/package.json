@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "seed": "node scripts/seed.js",
     "lint": "eslint .",
+    "dev": "next dev",
     "format": "prettier --write ."
   },
   "engines": {
@@ -33,6 +34,5 @@
     "nodemon": "^3.1.4",
     "prettier": "^3.6.2"
   },
-  { "type": "module" }
-
+  "type": "module"
 }
