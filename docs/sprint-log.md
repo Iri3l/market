@@ -37,3 +37,8 @@
 - Multi-image upload (parallel with concurrency limit, per-file progress).
 - Image validation (e.g., car listings must contain a car) via Rekognition/Vision.
 - Hide long querystrings everywhere (UX polish).
+### 2025-09-30
+- Fixed local/remote builds (Next.js preset).
+- Wired Vercel envs: AWS creds, region=eu-west-2, bucket=marketplace-images-irinel-uk-dev.
+- DNS: switched from A to CNAME; removed conflicting A/AAAA; SSL issued.
+- Verified API: /api/s3/presign and /api/s3/view-url on custom domain.

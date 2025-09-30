@@ -100,3 +100,9 @@
 - Auto-cropping/resize to standard sizes.
 - Deduping (hash) to skip duplicate uploads.
 - Reorder images with drag-and-drop.
+
+## 2025-09-30 — Staging live on Vercel
+- Deployed Next.js app to Vercel (prod).
+- Subdomain `market.lazarovici.co.uk` pointed via CNAME to `cname.vercel-dns.com`.
+- S3 uploads working from /upload-test (presign+PUT+preview).
+- Next: multi-file upload, type/size guardrails, basic moderation, rotate AWS keys.
