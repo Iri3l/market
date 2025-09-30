@@ -106,3 +106,9 @@
 - Subdomain `market.lazarovici.co.uk` pointed via CNAME to `cname.vercel-dns.com`.
 - S3 uploads working from /upload-test (presign+PUT+preview).
 - Next: multi-file upload, type/size guardrails, basic moderation, rotate AWS keys.
+
+### S3 uploads (phase 1, done)
+- Presign PUT (S3) + client upload with progress
+- Short-lived view URL for “Open preview”
+- **Inline preview via /api/s3/proxy-image (same-origin, no CORS drama)**
+Next: multi-file upload, file type/size limits, basic image moderation.

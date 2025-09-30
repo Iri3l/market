@@ -42,3 +42,7 @@
 - Wired Vercel envs: AWS creds, region=eu-west-2, bucket=marketplace-images-irinel-uk-dev.
 - DNS: switched from A to CNAME; removed conflicting A/AAAA; SSL issued.
 - Verified API: /api/s3/presign and /api/s3/view-url on custom domain.
+2025-09-30
+- Fixed custom domain (IONOS CNAME → Vercel).
+- Deploy working on production.
+- S3 uploads working; inline preview fixed using Next API proxy.
