@@ -126,3 +126,14 @@ Next: multi-file upload, file type/size limits, basic image moderation.
 - Client/image constraints: max dimensions & size, auto-compress large images
 - Server validation: MIME sniffing, extension whitelist, size guard
 - Optional: lightweight content safety (detect non-car images later)
+
+## Foundations Backlog (next up)
+- [ ] Thumbnails grid on upload-test (previewUrls[])
+- [ ] Choose DB (Neon/Supabase) and add Prisma
+- [ ] Schema: users, listings, images, sessions, categories
+- [ ] Auth.js (email OTP), session checks in API handlers
+- [ ] Listings CRUD APIs (POST/GET/PATCH/DELETE)
+- [ ] Attach uploaded image s3Keys to a draft listing
+- [ ] Listings browse page with filters + pagination
+- [ ] Server size guard on presign; per-listing image limit
+- [ ] Add .nvmrc, ESLint, Prettier; GitHub CI (lint + typecheck)
