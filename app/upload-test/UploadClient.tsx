@@ -1,6 +1,11 @@
 "use client";
 import { useState } from "react";
 
+const MAX_MB = 10;
+const MAX_BYTES = MAX_MB * 1024 * 1024;
+
+
+
 export default function UploadClient() {
   const [status, setStatus] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
