@@ -85,7 +85,14 @@ export default function UploadClient() {
     }
 
     const { url: viewUrl } = await viewRes.json();
-    setPreviewUrl(viewUrl);
+
+// Use proxy for inline <img> (same-origin, no CORS headaches)
+const proxyUrl = `/api/s3/proxy-image?key=${encodeURIComponent(key)}`;
+setPreviewUrl(proxyUrl);
+
+// Also keep a direct presigned link for the "Open preview" anchor
+// (optional: store both if you like)
+
   }
 
   return (
