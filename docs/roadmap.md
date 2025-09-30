@@ -112,3 +112,17 @@
 - Short-lived view URL for “Open preview”
 - **Inline preview via /api/s3/proxy-image (same-origin, no CORS drama)**
 Next: multi-file upload, file type/size limits, basic image moderation.
+
+## Uploads — Phase 1 ✅ (done)
+- Single & multi-image upload to S3 (sequential queue, progress bar)
+- Inline preview via same-origin proxy `/api/s3/proxy-image`
+- Batch summary: shows X/Y uploaded, failed list + per-item links
+- CORS hardened (localhost + market.lazarovici.co.uk)
+- Env parity (local pulls from Vercel)
+
+### Phase 2 (next)
+- Parallel uploads with per-file progress
+- Thumbnails for all uploaded items (grid)
+- Client/image constraints: max dimensions & size, auto-compress large images
+- Server validation: MIME sniffing, extension whitelist, size guard
+- Optional: lightweight content safety (detect non-car images later)

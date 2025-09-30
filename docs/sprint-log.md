@@ -51,3 +51,9 @@
 - S3 uploads: presign PUT + GET, inline preview via /api/s3/proxy-image.
 - Local env parity: pulled Vercel envs to .env.local; localhost upload works.
 - S3 CORS: allowed localhost:3000 + market.lazarovici.co.uk (PUT/GET/HEAD).
+2025-09-30
+- Domain + SSL on Vercel working (market.lazarovici.co.uk)
+- S3 uploads stable in prod & localhost (env + CORS aligned)
+- Added multi-image selection (sequential queue with progress)
+- Inline preview via /api/s3/proxy-image; preview reliability fixed
+- Batch summary UX: X/Y uploaded, failed list, per-file open links
