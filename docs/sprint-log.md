@@ -46,3 +46,8 @@
 - Fixed custom domain (IONOS CNAME → Vercel).
 - Deploy working on production.
 - S3 uploads working; inline preview fixed using Next API proxy.
+2025-09-30
+- Vercel prod live on market.lazarovici.co.uk with SSL.
+- S3 uploads: presign PUT + GET, inline preview via /api/s3/proxy-image.
+- Local env parity: pulled Vercel envs to .env.local; localhost upload works.
+- S3 CORS: allowed localhost:3000 + market.lazarovici.co.uk (PUT/GET/HEAD).
