@@ -116,27 +116,31 @@ export default function UploadClient() {
     >
       Open preview
     </a>
-
-    {isImage && (
-      <div className="mt-3">
-        <img
-          src={previewUrl}
-          alt="Uploaded preview"
-          className="rounded-md"
-          style={{
-            maxWidth: 600,
-            width: "100%",
-            maxHeight: 380,
-            objectFit: "contain",
-            border: "1px solid #eee",
-          }}
-        />
-      </div>
-    )}
+{isImage && (
+  <div className="mt-3">
+    <img
+      src={previewUrl!}
+      alt="Uploaded preview"
+      referrerPolicy="no-referrer"
+      crossOrigin="anonymous"
+      className="rounded-md"
+      style={{
+        maxWidth: 600,
+        width: "100%",
+        maxHeight: 380,
+        objectFit: "contain",
+        border: "1px solid #eee",
+      }}
+      onLoad={() => setStatus((s) => s + " | ✅ preview loaded")}
+      onError={() => {
+        // Hide broken image and surface a clear reason to the user
+        setStatus((s) => s + " | ⚠️ preview failed (likely CORS, expired URL, or content-type)");
+      }}
+    />
   </div>
 )}
-
+  </div>
+)}
     </div>
   );
 }
-
