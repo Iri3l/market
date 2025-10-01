@@ -1,6 +1,23 @@
 # MARKET — Roadmap & Dev Log
+# MARKET — Roadmap (v4) • 2025-10-01
 
-## ✅ Completed (latest first)
+## ✅ Shipped today
+- Drag & drop uploads (multi-file)
+- Parallel uploads (adjustable concurrency)
+- Per-file progress + % and overall progress bar
+- Robust error surfacing (server messages bubbled to UI)
+- Adjustable thumbnail size via single constant `THUMB`
+- Image-only grid + separate “Other uploads”
+- Lightbox (click-to-zoom, Esc/←/→, Copy URL, Open full)
+- Load existing images from S3 on page load (`/api/s3/list`)
+- Manual “Refresh gallery”
+- Bulk “Clear gallery” via `/api/s3/clear`
+- Client “Show more” pagination (no API changes)
+- Tailwind v4 wiring (`@tailwindcss/postcss`), hydration fix (no nested buttons)
+- AWS IAM tightened: `s3:ListBucket`, `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`
+- Consistent S3 prefix: `uploads/` across list/clear/presign
+
+## ✅ Completed 
 ### [2025-09-30] Staging live on Vercel
 - Deployed Next.js app to Vercel (Production)
 - Custom subdomain `market.lazarovici.co.uk` (CNAME → `cname.vercel-dns.com`), SSL issued
@@ -28,12 +45,27 @@
 ---
 
 ## ⏭️ Up Next (short horizon)
-- **Thumbnails grid** on `/upload-test` (show all uploaded images at once)
-- **Parallel uploads** (small pool: 3–4) with per-file progress
-- **Client limits**: image/* only (done), add max size & nice errors (partly done)
-- **Server validation**: MIME sniffing, size guard, per-listing image cap
-- **Key namespacing**: `products/<id>/images/<ts>-<slug>.<ext>`
-- **Rotate AWS keys** (leaked earlier; replace in Vercel, disable old)
+## 🎯 Next session (priority)
+1) Per-thumb **Delete** (small trash icon + `/api/s3/delete`), optimistic UI, undo toast.
+2) **Real S3 pagination** (ListObjectsV2 continuation token) → “Load next 50”.
+3) **Upload guardrails** before presign (type allow-list + max size), friendly errors.
+4) **Cancel upload** (track XHR per file, `abort()`); disable “Start now” during active pool.
+5) **EXIF orientation** fix (iOS), optional canvas normalize pre-upload.
+6) **UI polish** (hover states, skeletons, dark mode).
+7) (Stretch) **Copy URL** on thumb + keyboard focus traps in lightbox.
+
+## 🧱 Foundations (backlog)
+- Choose DB (Neon/Supabase) + Prisma
+- Auth.js (email OTP) + server session checks
+- Listings schema & CRUD; attach uploaded `s3Key[]` to draft listing
+- Listings browse with filters + pagination
+- CI: lint + typecheck; `.nvmrc`, ESLint, Prettier
+
+## 📌 Notes
+- API routes run on **Node runtime**, not Edge.
+- Env: `S3_BUCKET` (fallback `S3_BUCKET_NAME`), `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+- Signed GET URL TTL: 5 minutes (tweakable).
+- Default concurrency: 3 (cap at 4 recommended).
 
 ---
 

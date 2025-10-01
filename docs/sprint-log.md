@@ -57,3 +57,42 @@
 - Added multi-image selection (sequential queue with progress)
 - Inline preview via /api/s3/proxy-image; preview reliability fixed
 - Batch summary UX: X/Y uploaded, failed list, per-file open links
+# Sprint Log — MARKET Project (Europe/London)
+
+## 2025-10-01 — Uploads v2, Lightbox, S3 Backfill, Cleanup
+**Summary**  
+Implemented end-to-end image workflow: DnD, parallel uploads, per-file & overall progress, lightbox, S3 backfill, refresh, bulk clear, and client pagination. Fixed Tailwind v4 setup and hydration issues. Standardized AWS routes and IAM.
+
+**Timeline (approx):**
+- 14:10 — DnD wired; thumbnails constrained to square tiles; filtered non-images.
+- 15:00 — Build typo fixed (`useMemo`), discovered missing Tailwind; installed Tailwind v4 + `@tailwindcss/postcss`; globals wired.
+- 15:40 — Per-file % label + overall % bar; removed noisy “DONE” chips.
+- 16:00 — Lightbox (Esc/←/→, Copy URL, Open full) added.
+- 16:30 — `/api/s3/list` added; surfaced errors; standardized envs (`S3_BUCKET`).
+- 16:50 — Forced Node runtime on API routes; better server error messages.
+- 17:10 — IAM fixed: `s3:ListBucket` + `s3:GetObject` → gallery backfilled historical images.
+- 17:30 — Presign 500 fixed: Node runtime + `s3:PutObject`; uploads good again.
+- 17:50 — “Refresh gallery” + client “Show more” (24 per click).
+- 18:00 — `/api/s3/clear` bulk delete + `s3:DeleteObject`; sandbox reset.
+- 18:20 — Hydration error (“button inside button”) resolved; controls row sanitized.
+
+**Files touched (high-level)**
+- `app/upload-test/UploadClient.tsx` — DnD, concurrency, progress, grid, lightbox, refresh, clear, show more.
+- `app/upload-test/page.tsx` — renders `UploadClient`.
+- `app/api/s3/presign/route.ts` — signed PUT (Node runtime).
+- `app/api/s3/view-url/route.ts` — signed GET (Node runtime).
+- `app/api/s3/list/route.ts` — list by prefix (Node runtime).
+- `app/api/s3/clear/route.ts` — bulk delete by prefix (Node runtime).
+- `postcss.config.js` — Tailwind v4 plugin (`@tailwindcss/postcss`).
+- `app/globals.css` — Tailwind layers.
+- (optional) `tailwind.config.js` — content globs if kept.
+
+**IAM (dev)**
+- Bucket: `marketplace-images-irinel-uk-dev`
+- Allowed: `s3:ListBucket` (bucket), `s3:GetObject|PutObject|DeleteObject` (bucket/*)
+- Prefix: `uploads/` for list/clear/presign.
+
+**Open questions**
+- Per-thumb delete: optimistic vs after-confirm?
+- Dev size/type limits (e.g., 10 MB, image/* only)?
+
