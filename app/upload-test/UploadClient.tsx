@@ -31,6 +31,45 @@ export default function UploadClient() {
   const [dragOver, setDragOver] = useState(false)
   const [concurrency, setConcurrency] = useState(3)
   const [autoStart, setAutoStart] = useState(true)
+// Zoom modal (lightbox)
+// views declared later (so they don't get redeclared)
+
+// then lightbox state + helpers
+const [lightbox, setLightbox] = useState<{ index: number } | null>(null)
+const [copied, setCopied] = useState(false)
+
+// open / close / navigation helpers for the lightbox
+const openAt = useCallback((index: number) => setLightbox({ index }), [])
+const close = useCallback(() => setLightbox(null), [])
+const prev = useCallback(() => {
+  setLightbox(lb => {
+    if (!lb) return null
+    const imgs = items.filter(i => i.getUrl && isImage(i.file))
+    if (imgs.length === 0) return null
+    return { index: (lb.index - 1 + imgs.length) % imgs.length }
+  })
+}, [items])
+const next = useCallback(() => {
+  setLightbox(lb => {
+    if (!lb) return null
+    const imgs = items.filter(i => i.getUrl && isImage(i.file))
+    if (imgs.length === 0) return null
+    return { index: (lb.index + 1) % imgs.length }
+  })
+}, [items])
+
+useEffect(() => {
+  if (!lightbox) return
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") close()
+    else if (e.key === "ArrowLeft") prev()
+    else if (e.key === "ArrowRight") next()
+  }
+  window.addEventListener("keydown", onKey)
+  return () => window.removeEventListener("keydown", onKey)
+}, [lightbox, close, prev, next])
+
+
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const queued = items.filter(i => i.status === "queued").length
@@ -160,6 +199,74 @@ export default function UploadClient() {
   const total = items.reduce((sum, i) => sum + (i.status === "done" ? 100 : i.progress), 0)
   return Math.round(total / items.length)
 }, [items])
+// Load existing images from S3 on mount
+useEffect(() => {
+  let cancelled = false
+
+  async function run() {
+    try {
+      // 1) list keys
+      const listRes = await fetch("/api/s3/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prefix: "" }), // e.g. "uploads/" if you use a folder
+      })
+      if (!listRes.ok) throw new Error(`list failed: ${listRes.status}`)
+      const { keys } = (await listRes.json()) as { keys: string[] }
+
+      // 2) keep images only
+      const imgKeys = keys.filter(k =>
+        /\.(png|jpe?g|gif|webp|bmp|tiff|svg)$/i.test(k)
+      )
+
+      // 3) get short-TTL view URLs for each key (parallel, but cap to 10 at a time)
+      const batches: string[][] = []
+      const B = 10
+      for (let i = 0; i < imgKeys.length; i += B) batches.push(imgKeys.slice(i, i + B))
+
+      const results: { key: string; url: string }[] = []
+      for (const chunk of batches) {
+        const urls = await Promise.all(
+          chunk.map(async key => {
+            const r = await fetch("/api/s3/view-url", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ key }),
+            })
+            if (!r.ok) throw new Error(`view-url failed for ${key}`)
+            const { url } = (await r.json()) as { url: string }
+            return { key, url }
+          })
+        )
+        results.push(...urls)
+        if (cancelled) return
+      }
+
+      // 4) merge into items state if not already present
+      setItems(prev => {
+        // build a set of already-known keys
+        const have = new Set(prev.map(i => i.key))
+        const newcomers = results
+          .filter(r => !have.has(r.key))
+          .map((r, idx) => ({
+            id: `existing-${r.key}-${idx}`,
+            file: new File([""], r.key.split("/").pop() || r.key, { type: "image/*" }),
+            key: r.key,
+            putUrl: undefined,
+            getUrl: r.url,
+            progress: 100,
+            status: "done" as const,
+          }))
+        return [...newcomers, ...prev] // show existing first
+      })
+    } catch (e) {
+      console.warn("initial gallery load failed:", e)
+    }
+  }
+
+  run()
+  return () => { cancelled = true }
+}, [])
 
 
   return (
@@ -276,20 +383,29 @@ export default function UploadClient() {
               gap: 12,
             }}
           >
-            {imageGrid.map(item => (
-              <figure key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ width: THUMB, height: THUMB, background: "#f3f4f6", overflow: "hidden" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.getUrl!}
-                    alt={item.file.name}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                  />
-                </div>
-                <figcaption style={{ padding: "6px 8px", fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
-                  {item.file.name}
-                </figcaption>
-              </figure>
+            {imageGrid.map((item,idx) => (
+              <figure
+  key={item.id}
+  className="rounded-xl overflow-hidden border cursor-zoom-in"
+  onClick={() => openAt(idx)} // <- add idx in the map callback params
+>
+  <div
+    style={{ width: THUMB, height: THUMB, background: "#f3f4f6", overflow: "hidden" }}
+  >
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img
+      src={item.getUrl!}
+      alt={item.file.name}
+      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+    />
+  </div>
+  <figcaption
+    style={{ padding: "6px 8px", fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
+  >
+    {item.file.name}
+  </figcaption>
+</figure>
+
             ))}
           </div>
         </div>
@@ -309,6 +425,79 @@ export default function UploadClient() {
           </ul>
         </div>
       )}
+      {/* Lightbox modal */}
+{lightbox && imageGrid[lightbox.index] && (() => {
+  const current = imageGrid[lightbox.index]
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(current.getUrl!)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {}
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center"
+      onClick={close}
+    >
+      {/* Stop clicks from closing when interacting with content */}
+      <div className="relative max-w-[90vw] max-h-[85vh]" onClick={e => e.stopPropagation()}>
+        {/* Image */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={current.getUrl!}
+          alt={current.file.name}
+          className="max-w-[90vw] max-h-[80vh] object-contain rounded-xl shadow-2xl"
+        />
+
+        {/* Top-right close */}
+        <button
+          onClick={close}
+          className="absolute -top-10 right-0 text-white/90 hover:text-white text-sm"
+          aria-label="Close"
+        >
+          ✕ Close (Esc)
+        </button>
+
+        {/* Prev / Next */}
+        <button
+          onClick={prev}
+          className="absolute left-[-56px] top-1/2 -translate-y-1/2 text-white/90 hover:text-white text-2xl"
+          aria-label="Previous"
+        >
+          ‹
+        </button>
+        <button
+          onClick={next}
+          className="absolute right-[-56px] top-1/2 -translate-y-1/2 text-white/90 hover:text-white text-2xl"
+          aria-label="Next"
+        >
+          ›
+        </button>
+
+        {/* Bottom bar */}
+        <div className="mt-3 flex items-center justify-between text-white/90 text-sm">
+          <div className="truncate max-w-[60vw]">{current.file.name}</div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={copyUrl}
+              className="rounded-full border border-white/30 px-3 py-1 hover:bg-white/10"
+            >
+              {copied ? "Copied!" : "Copy URL"}
+            </button>
+            <button
+              onClick={() => window.open(current.getUrl!, "_blank")}
+              className="rounded-full border border-white/30 px-3 py-1 hover:bg-white/10"
+            >
+              Open full
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+})()}
+
     </div>
   )
 }
