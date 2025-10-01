@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export const runtime = "nodejs";
@@ -24,24 +24,19 @@ export async function POST(req: Request) {
   const { s3, bucket } = env;
 
   try {
-    const body = await req.json().catch(() => ({}) as any);
-    const filename = String(body.filename || "file.bin");
-    const contentType = String(body.contentType || "application/octet-stream");
-    const prefix = typeof body.prefix === "string" ? body.prefix : "uploads/";
-    const dir = prefix.endsWith("/") ? prefix : `${prefix}/`;
-    const key = `${dir}${Date.now()}-${Math.random().toString(36).slice(2)}-${filename}`;
-    const cmd = new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      ContentType: contentType,
-    });
+    const body = await req.json();
+    const key = String(body.key || "");
+    if (!key)
+      return NextResponse.json({ error: "Missing key" }, { status: 400 });
+
+    const cmd = new DeleteObjectCommand({ Bucket: bucket, Key: key });
     const url = await getSignedUrl(s3, cmd, { expiresIn: 60 * 5 });
-    return NextResponse.json({ url, key });
+    return NextResponse.json({ url });
   } catch (err: any) {
-    console.error("presign error:", err);
+    console.error("delete presign error:", err);
     const code = err?.$metadata?.httpStatusCode || 500;
     return NextResponse.json(
-      { error: err?.message || "presign failed" },
+      { error: err?.message || "delete presign failed" },
       { status: code },
     );
   }
