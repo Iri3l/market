@@ -34,6 +34,7 @@ export default function UploadClient() {
   const [concurrency, setConcurrency] = useState(3)
   const [autoStart, setAutoStart] = useState(true)
   const [visible, setVisible] = useState(24) // thumbnails shown initially
+  const [undo, setUndo] = useState<{ item: File; key?: string; id: string; timeoutId: number } | null>(null)
 
   // Lightbox
   const [lightbox, setLightbox] = useState<{ index: number } | null>(null)
@@ -194,6 +195,26 @@ export default function UploadClient() {
       xhr.send(file)
     })
   }
+  async function deleteItemByKey(id: string, key: string, file: File) {
+  setItems(prev => prev.filter(i => i.id !== id))
+  const timeoutId = window.setTimeout(async () => {
+    try {
+      const r = await fetch("/api/s3/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      })
+      const data = await r.json().catch(() => ({} as any))
+      if (!r.ok) throw new Error(data?.error || `delete failed: ${r.status}`)
+    } catch (e:any) {
+      setItems(prev => [{ id, file, key, progress: 100, status: "done", getUrl: prev.find(p => p.id===id)?.getUrl }, ...prev])
+      alert(e.message)
+    } finally {
+      setUndo(u => (u && u.id === id ? null : u))
+    }
+  }, 5000)
+  setUndo({ item: file, key, id, timeoutId })
+}
 
   // ---------- Concurrency pool ----------
   const startUploads = useCallback(async () => {
@@ -440,27 +461,42 @@ export default function UploadClient() {
               gap: 12,
             }}
           >
-            {imageGrid.slice(0, visible).map((item, idx) => (
-              <figure
-                key={item.id}
-                className="rounded-xl overflow-hidden border cursor-zoom-in"
-                onClick={() => setLightbox({ index: idx })}
-              >
-                <div style={{ width: THUMB, height: THUMB, background: "#f3f4f6", overflow: "hidden" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.getUrl!}
-                    alt={item.file.name}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                  />
-                </div>
-                <figcaption
-                  style={{ padding: "6px 8px", fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
-                >
-                  {item.file.name}
-                </figcaption>
-              </figure>
-            ))}
+{imageGrid.slice(0, visible).map((item, idx) => (
+  <div key={item.id} className="relative">
+    {item.key && (
+      <button
+        type="button"
+        aria-label="Delete image"
+        title="Delete"
+        onClick={(e) => { e.stopPropagation(); deleteItemByKey(item.id, item.key!, item.file) }}
+        className="absolute right-2 top-2 z-10 rounded-full border bg-white px-2 py-1 text-xs shadow hover:bg-white/90"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M9 3h6m-9 4h12M9 7v12m6-12v12M5 7l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+    )}
+
+    <div
+      className="rounded-xl overflow-hidden border cursor-zoom-in"
+      onClick={() => setLightbox({ index: idx })}
+    >
+      <div style={{ width: THUMB, height: THUMB, background: "#f3f4f6", overflow: "hidden" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={item.getUrl!}
+          alt={item.file.name}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      </div>
+      <figcaption
+        style={{ padding: "6px 8px", fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}
+      >
+        {item.file.name}
+      </figcaption>
+    </div>
+  </div>
+))}
           </div>
 
           {/* Show more */}
