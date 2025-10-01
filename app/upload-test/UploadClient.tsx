@@ -1,214 +1,314 @@
-"use client";
+// app/upload-test/UploadClient.tsx
+"use client"
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-const MAX_MB = 10;
-const MAX_BYTES = MAX_MB * 1024 * 1024;
+// === One knob to rule them all ===
+const THUMB = 160 // ← change this number to resize ALL thumbnails (px)
+
+// --- API response types (adjust if your API differs) ---
+interface PresignResp { url: string; key: string }
+interface ViewUrlResp  { url: string }
+
+// --- Upload item state ---
+interface FileItem {
+  id: string
+  file: File
+  key?: string
+  putUrl?: string
+  getUrl?: string
+  progress: number // 0..100
+  status: "queued" | "uploading" | "done" | "error"
+  error?: string
+}
+
+const isImage = (file: File) =>
+  (file.type && file.type.startsWith("image/")) ||
+  /\.(png|jpe?g|gif|webp|bmp|tiff|svg)$/i.test(file.name)
 
 export default function UploadClient() {
-  const [status, setStatus] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isImage, setIsImage] = useState(false);
-  const [pct, setPct] = useState<number | null>(null);
+  const [items, setItems] = useState<FileItem[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const [concurrency, setConcurrency] = useState(3)
+  const [autoStart, setAutoStart] = useState(true)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
-  const [uploaded, setUploaded] = useState<string[]>([]);
-  const [failed, setFailed] = useState<string[]>([]);
+  const queued = items.filter(i => i.status === "queued").length
+  const uploading = items.filter(i => i.status === "uploading").length
+  const done = items.filter(i => i.status === "done").length
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // ---------- Helpers ----------
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files)
+    setItems(prev => [
+      ...prev,
+      ...arr.map((f, idx) => ({
+        id: `${Date.now()}-${prev.length + idx}`,
+        file: f,
+        progress: 0,
+        status: "queued" as const,
+      })),
+    ])
+  }, [])
 
-  function niceBytes(n: number) {
-    return n < 1024 ? `${n} B`
-      : n < 1024 ** 2 ? `${(n / 1024).toFixed(1)} KB`
-      : `${(n / 1024 ** 2).toFixed(1)} MB`;
+  const onPick = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) addFiles(e.target.files)
+    if (inputRef.current) inputRef.current.value = ""
+  }, [addFiles])
+
+  const onDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); setDragOver(true)
+  }, [])
+  const onDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"; setDragOver(true)
+  }, [])
+  const onDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); setDragOver(false)
+  }, [])
+  const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); setDragOver(false)
+    const files = e.dataTransfer?.files
+    if (files && files.length) addFiles(files)
+  }, [addFiles])
+
+  // ---------- API ----------
+  async function presign(f: File): Promise<PresignResp> {
+    const r = await fetch("/api/s3/presign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filename: f.name, contentType: f.type || "application/octet-stream", size: f.size }),
+    })
+    if (!r.ok) throw new Error(`presign failed: ${r.status}`)
+    return r.json()
   }
 
-  async function onChange(e: React.ChangeEvent<HTMLInputElement>) {
-    // Copy the FileList immediately; don't rely on the event later
-    const files = Array.from(e.currentTarget.files || []);
-    if (files.length === 0) return;
+  async function viewUrl(key: string): Promise<string> {
+    const r = await fetch("/api/s3/view-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    })
+    if (!r.ok) throw new Error(`view-url failed: ${r.status}`)
+    const data = (await r.json()) as ViewUrlResp
+    return data.url
+  }
 
-    // reset per-batch summary
-    setUploaded([]);
-    setFailed([]);
-
-    const uploadedKeys: string[] = [];
-    const failedNames: string[] = [];
-
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) {
-        failedNames.push(`${file.name} (not an image)`);
-        continue;
+  function putWithProgress(putUrl: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open("PUT", putUrl)
+      xhr.upload.onprogress = evt => {
+        if (evt.lengthComputable) {
+          const pct = Math.round((evt.loaded / evt.total) * 100)
+          onProgress(pct)
+        }
       }
-      if (file.size > MAX_BYTES) {
-        failedNames.push(`${file.name} (>${MAX_MB} MB, ${niceBytes(file.size)})`);
-        continue;
-      }
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`PUT ${xhr.status}`)))
+      xhr.onerror = () => reject(new Error("Network error during PUT"))
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream")
+      xhr.send(file)
+    })
+  }
 
-      setPreviewUrl(null);
-      setIsImage(false);
-      setStatus(`Requesting URL for ${file.name}…`);
-      setPct(null);
+  // ---------- Concurrency pool ----------
+  const startUploads = useCallback(async () => {
+    const queue = () => itemsRef.current.filter(i => i.status === "queued")
 
-      // 1) Presign
-      const presign = await fetch("/api/s3/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type || "application/octet-stream",
-        }),
-      });
-      if (!presign.ok) {
-        failedNames.push(`${file.name} (presign ${presign.status})`);
-        continue;
-      }
-      const { url, key } = await presign.json();
+    const runNext = async (): Promise<void> => {
+      const next = queue().shift()
+      if (!next) return
 
-      // 2) Upload (PUT) with progress
-      setStatus(`Uploading ${file.name}…`);
-      setPct(0);
+      setItems(prev => prev.map(i => (i.id === next.id ? { ...i, status: "uploading", progress: 2 } : i)))
+
       try {
-        await new Promise<void>((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open("PUT", url, true);
-          xhr.setRequestHeader(
-            "Content-Type",
-            file.type || "application/octet-stream"
-          );
-          xhr.upload.onprogress = (ev) => {
-            if (ev.lengthComputable) {
-              setPct(Math.round((ev.loaded / ev.total) * 100));
-            }
-          };
-          xhr.onload = () =>
-            xhr.status >= 200 && xhr.status < 300
-              ? resolve()
-              : reject(new Error(String(xhr.status)));
-          xhr.onerror = () => reject(new Error("network error"));
-          xhr.send(file);
-        });
-      } catch {
-        failedNames.push(`${file.name} (upload failed)`);
-        setPct(null);
-        continue;
+        const { url, key } = await presign(next.file)
+        setItems(prev => prev.map(i => (i.id === next.id ? { ...i, putUrl: url, key } : i)))
+
+        await putWithProgress(url, next.file, pct => {
+          setItems(prev => prev.map(i => (i.id === next.id ? { ...i, progress: pct } : i)))
+        })
+
+        const getUrl = await viewUrl(key)
+        setItems(prev => prev.map(i => (i.id === next.id ? { ...i, getUrl, progress: 100, status: "done" } : i)))
+      } catch (err: any) {
+        setItems(prev => prev.map(i => (i.id === next.id ? { ...i, status: "error", error: err?.message || String(err) } : i)))
+      } finally {
+        await runNext()
       }
-
-      setPct(null);
-      uploadedKeys.push(key);
-      setStatus((s) => `✅ Uploaded ${file.name}`);
-
-      // 3) Inline preview for the LAST uploaded item (via same-origin proxy)
-      const proxyUrl = `/api/s3/proxy-image?key=${encodeURIComponent(key)}`;
-      setPreviewUrl(proxyUrl);
-      setIsImage(true);
     }
 
-    setUploaded(uploadedKeys);
-    setFailed(failedNames);
+    const workers = Array.from({ length: Math.max(1, concurrency) }, () => runNext())
+    await Promise.all(workers)
+  }, [concurrency])
 
-    const ok = uploadedKeys.length;
-    const no = failedNames.length;
-    setStatus(
-      `Batch complete: ${ok}/${files.length} uploaded${no ? `, ${no} failed` : ""}.`
-    );
+  // keep latest items inside the pool
+  const itemsRef = useRef<FileItem[]>(items)
+  useEffect(() => { itemsRef.current = items }, [items])
 
-    // Safely reset chooser using the ref (event may be nulled after await)
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
+  useEffect(() => {
+    if (autoStart && items.some(i => i.status === "queued")) {
+      // fire-and-forget
+      startUploads()
+    }
+  }, [autoStart, items, startUploads])
+
+  // ---------- Views ----------
+  const imageGrid = useMemo(() => items.filter(i => i.getUrl && isImage(i.file)), [items])
+  const otherFiles = useMemo(() => items.filter(i => i.getUrl && !isImage(i.file)), [items])
+  const overall = useMemo(() => {
+  if (items.length === 0) return 0
+  const total = items.reduce((sum, i) => sum + (i.status === "done" ? 100 : i.progress), 0)
+  return Math.round(total / items.length)
+}, [items])
+
 
   return (
-    <div className="max-w-md space-y-3 p-4 border rounded-xl">
-      <h2 className="text-lg font-semibold">S3 Upload Test</h2>
+    <div className="mx-auto max-w-5xl p-6 space-y-6">
+      <h1 className="text-2xl font-semibold tracking-tight">S3 Upload Test · Thumbnails + Parallel Uploads</h1>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={onChange}
-      />
+      <div className="flex items-center gap-4">
+        <button className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50" onClick={() => inputRef.current?.click()}>
+          Choose files
+        </button>
+        <input ref={inputRef} type="file" multiple hidden onChange={onPick} />
 
-      {/* Progress bar */}
-      {pct !== null && (
-        <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
-          <div
-            className="bg-black h-2"
-            style={{ width: `${pct}%`, transition: "width 120ms linear" }}
+        <label className="text-sm flex items-center gap-2">
+          <input type="checkbox" checked={autoStart} onChange={e => setAutoStart(e.target.checked)} />
+          Auto-start uploads
+        </label>
+
+        <label className="text-sm flex items-center gap-2">
+          Concurrency
+          <input
+            type="number"
+            min={1}
+            max={6}
+            value={concurrency}
+            onChange={e => setConcurrency(Number(e.target.value) || 1)}
+            className="w-16 rounded border px-2 py-1"
           />
+        </label>
+
+        <button
+          className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+          disabled={items.every(i => i.status !== "queued")}
+          onClick={() => startUploads()}
+        >
+          Start now
+        </button>
+
+        <div className="ml-auto flex items-center gap-3">
+  <div className="w-40 h-2 bg-gray-100 rounded-full overflow-hidden relative" title={`Overall ${overall}%`}>
+    <div className="h-full bg-black" style={{ width: `${overall}%` }} />
+  </div>
+  <div className="text-sm text-gray-600 whitespace-nowrap">
+    Overall: {overall}% · {done} done · {uploading} uploading · {queued} queued
+  </div>
+</div>
+
+      </div>
+
+      {/* Drag & drop zone */}
+      <div
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        className={`rounded-2xl border border-dashed p-10 text-center min-h-[140px] flex flex-col items-center justify-center ${dragOver ? "bg-gray-50" : ""}`}
+      >
+        <p className="font-medium">Drag & drop files here</p>
+        <p className="text-sm text-gray-600">or click "Choose files"</p>
+      </div>
+
+      {/* Upload list */}
+      {items.length > 0 && (
+        <div className="space-y-2">
+          {items.map(item => (
+            <div key={item.id} className="rounded-xl border p-3 flex items-center gap-4">
+  <div className="w-40 truncate text-sm">{item.file.name}</div>
+
+  {/* progress bar + % */}
+  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden relative">
+    <div
+      className={`h-full ${item.status === "error" ? "bg-red-500" : "bg-black"}`}
+      style={{ width: `${item.progress}%` }}
+    />
+    {item.status !== "done" && (
+      <span className="absolute right-1 -top-5 text-xs">{item.progress}%</span>
+    )}
+  </div>
+
+  {/* error + retry only when needed */}
+  {item.status === "error" && (
+    <div className="flex items-center gap-2">
+      <div className="text-xs text-red-600 truncate max-w-[240px]">{item.error}</div>
+      <button
+        className="text-xs underline"
+        onClick={() => {
+          setItems(p =>
+            p.map(i =>
+              i.id === item.id
+                ? { ...i, status: "queued", progress: 0, error: undefined }
+                : i
+            )
+          )
+        }}
+      >
+        Retry
+      </button>
+    </div>
+  )}
+</div>
+
+          ))}
         </div>
       )}
 
-      <p className="text-sm">{status}</p>
+      {/* Thumbnails grid (INLINE sizes; controlled by THUMB) */}
+      {imageGrid.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">Uploaded images</h2>
 
-      {previewUrl && (
-        <div className="mt-3">
-          <div className="text-sm mb-2">Preview link (expires in ~5 min):</div>
-
-          <a
-            className="underline"
-            href={previewUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Open preview of uploaded file in a new tab"
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(auto-fill, minmax(${THUMB + 16}px, 1fr))`,
+              gap: 12,
+            }}
           >
-            Open preview
-          </a>
-
-          {isImage && (
-            <div className="mt-3">
-              <img
-                src={previewUrl}
-                alt="Uploaded preview"
-                className="rounded-md"
-                style={{
-                  maxWidth: 600,
-                  width: "100%",
-                  maxHeight: 380,
-                  objectFit: "contain",
-                  border: "1px solid #eee",
-                }}
-                onLoad={() => setStatus((s) => s + " | ✅ preview loaded")}
-                onError={() => setStatus((s) => s + " | ⚠️ preview failed")}
-              />
-            </div>
-          )}
+            {imageGrid.map(item => (
+              <figure key={item.id} style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ width: THUMB, height: THUMB, background: "#f3f4f6", overflow: "hidden" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.getUrl!}
+                    alt={item.file.name}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
+                </div>
+                <figcaption style={{ padding: "6px 8px", fontSize: 12, whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden" }}>
+                  {item.file.name}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Batch summary */}
-      {(uploaded.length > 0 || failed.length > 0) && (
-        <div className="mt-4 space-y-2 text-sm">
-          {uploaded.length > 0 && (
-            <div>
-              <div className="font-medium">Uploaded ({uploaded.length}):</div>
-              <ul className="list-disc ml-5">
-                {uploaded.map((key) => (
-                  <li key={key}>
-                    <a
-                      className="underline"
-                      href={`/api/s3/proxy-image?key=${encodeURIComponent(key)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open {key.split("/").pop()}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {failed.length > 0 && (
-            <div>
-              <div className="font-medium">Failed ({failed.length}):</div>
-              <ul className="list-disc ml-5">
-                {failed.map((name) => (
-                  <li key={name}>{name}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {/* Non-image files */}
+      {otherFiles.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mt-6 mb-2">Other uploads</h2>
+          <ul className="space-y-2">
+            {otherFiles.map(item => (
+              <li key={item.id} className="flex items-center justify-between rounded-xl border p-3 text-sm">
+                <span className="truncate mr-3">{item.file.name}</span>
+                <a href={item.getUrl!} target="_blank" className="underline">Open</a>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
-  );
+  )
 }
