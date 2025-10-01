@@ -24,7 +24,7 @@ export async function GET(req: Request) {
       new GetObjectCommand({
         Bucket: process.env.S3_BUCKET_NAME!,
         Key: key,
-      })
+      }),
     );
 
     // Convert Node stream -> Web stream
@@ -40,8 +40,11 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err?.name || "GetObjectError", message: err?.message || "failed" },
-      { status: 500 }
+      {
+        error: err?.name || "GetObjectError",
+        message: err?.message || "failed",
+      },
+      { status: 500 },
     );
   }
 }

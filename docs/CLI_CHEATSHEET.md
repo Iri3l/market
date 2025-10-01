@@ -5,6 +5,7 @@ Fast commands you’ll actually use. Copy–paste, ship faster.
 ---
 
 ## Basics
+
 ```bash
 pwd                 # where am I?
 ls -la              # list files (incl. hidden)
@@ -87,3 +88,4 @@ Flags are adverbs (-la, -nR, --oneline)
 Pipes | chain commands like lego
 
 Aliases = automate the boring stuff
+```

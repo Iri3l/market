@@ -36,7 +36,7 @@ async function main() {
         Key: key,
         Body: body,
         ContentType: "text/plain",
-      })
+      }),
     );
     console.log(`✅ Uploaded s3://${bucket}/${key}`);
   } catch (err: any) {
