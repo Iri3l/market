@@ -40,3 +40,6 @@ api/.env
 .env
 .env.local
 api/.env
+
+# local scripts
+scripts/*.mjs
