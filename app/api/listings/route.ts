@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { connectMongo } from "@/lib/db"
-import Listing from "@/lib/models/Listing"
+import { connectMongo } from "../../../lib/db"
+import Listing from "../../../lib/models/Listing"
 
 export const runtime = "nodejs"
 
