@@ -30,3 +30,8 @@ api/.env
 
 # backups
 *.bak
+
+# envs
+.env
+.env.local
+api/.env

@@ -1,4 +1,5 @@
 // app/listings/page.tsx
+import { headers } from "next/headers"
 
 type Listing = {
   _id: string
@@ -12,31 +13,34 @@ type Listing = {
 }
 
 async function fetchListings(search: string) {
-  const res = await fetch(`/api/proxy/listings${search ? `?${search}` : ""}`, { cache: "no-store" })
+  // Build absolute URL from incoming request (works in dev & Vercel)
+  const h = headers()
+  const host = h.get("host") || "localhost:3000"
+  const proto = host.includes("localhost") ? "http" : "https"
+  const base = `${proto}://${host}`
+
+  const res = await fetch(
+    `${base}/api/proxy/listings${search ? `?${search}` : ""}`,
+    { cache: "no-store" }
+  )
   if (!res.ok) throw new Error(`Failed to load listings: ${res.status}`)
-  return res.json() as Promise<{ items: any[]; total: number; page: number; pages: number }>;
+  return res.json() as Promise<{ items: Listing[]; total: number; page: number; pages: number }>
 }
 
 export default async function ListingsPage({
   searchParams,
-}: {
-  searchParams?: Record<string, string | string[]>
-}) {
-  // Build query string safely from searchParams
+}: { searchParams?: Record<string, string | string[]> }) {
   const sp = new URLSearchParams()
   if (searchParams) {
     for (const [k, v] of Object.entries(searchParams)) {
-      if (Array.isArray(v)) v.forEach((x) => sp.append(k, String(x)))
+      if (Array.isArray(v)) v.forEach(x => sp.append(k, String(x)))
       else if (v != null) sp.set(k, String(v))
     }
   }
 
   let data: { items: Listing[]; total: number; page: number; pages: number }
-  try {
-    data = await fetchListings(sp.toString())
-  } catch {
-    data = { items: [], total: 0, page: 1, pages: 1 }
-  }
+  try { data = await fetchListings(sp.toString()) }
+  catch { data = { items: [], total: 0, page: 1, pages: 1 } }
 
   const { items, total } = data
 
@@ -57,17 +61,10 @@ export default async function ListingsPage({
                 : ""
 
             return (
-              <li
-                key={it._id}
-                className="rounded-xl border p-4 hover:shadow-sm transition"
-              >
+              <li key={it._id} className="rounded-xl border p-4 hover:shadow-sm transition">
                 {firstImg ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={firstImg}
-                    alt={it.title}
-                    className="w-full h-40 object-cover rounded-lg mb-3"
-                  />
+                  <img src={firstImg} alt={it.title} className="w-full h-40 object-cover rounded-lg mb-3" />
                 ) : (
                   <div className="w-full h-40 bg-gray-100 rounded-lg mb-3 grid place-items-center text-sm text-gray-400">
                     No image
@@ -83,13 +80,9 @@ export default async function ListingsPage({
                     {typeof it.price === "number" ? `£${it.price.toLocaleString()}` : "—"}
                   </span>
                   {it.part ? (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">
-                      Part
-                    </span>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800">Part</span>
                   ) : (
-                    <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-800">
-                      Car
-                    </span>
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-800">Car</span>
                   )}
                 </div>
               </li>
