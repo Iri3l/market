@@ -28,8 +28,8 @@ export async function GET(req: Request) {
 
     const skip = (Math.max(1, page) - 1) * limit
     const [items, total] = await Promise.all([
-      Listing.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Listing.countDocuments(filter),
+      ListingModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      ListingModel.countDocuments(filter),
     ])
 
     return NextResponse.json({

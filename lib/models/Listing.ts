@@ -1,31 +1,31 @@
-import { Schema, models, model } from "mongoose"
+import { Schema, model, models, type Model, type Document } from "mongoose";
 
-const ListingSchema = new Schema(
-  {
-    title: { type: String, required: true, trim: true },
-    description: { type: String, trim: true },
-    make: { type: String, index: true },
-    model: { type: String, index: true },
-    year: { type: Number, index: true },
-    price: { type: Number, index: true },
-    part: { type: Boolean, default: false, index: true },
-    images: [{ type: String }]
-  },
-  { timestamps: true }
-)
-
-ListingSchema.index({ title: "text", description: "text", make: "text", model: "text" })
-
-export type Listing = {
-  _id: string
-  title: string
-  description?: string
-  make?: string
-  model?: string
-  year?: number
-  price?: number
-  part?: boolean
-  images?: string[]
+export interface ListingDoc extends Document {
+  title: string;
+  make: string;
+  model: string;
+  year: number;
+  price: number;
+  part: boolean;
+  images: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export default models.Listing || model("Listing", ListingSchema)
+const ListingSchema = new Schema<ListingDoc>(
+  {
+    title: { type: String, required: true },
+    make: { type: String, required: true },
+    model: { type: String, required: true },
+    year: { type: Number, required: true },
+    price: { type: Number, required: true },
+    part: { type: Boolean, default: false },
+    images: { type: [String], default: [] },
+  },
+  { timestamps: true }
+);
+
+// Reuse model in dev to avoid OverwriteModelError
+const ListingModel: Model<ListingDoc> = (models.Listing as Model<ListingDoc>) || model<ListingDoc>("Listing", ListingSchema);
+
+export default ListingModel;
