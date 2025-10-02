@@ -1,6 +1,6 @@
 # Listings Specification (v0)
 
-Goal: deliver listings competitive with AutoTrader (cars & parts); start lean, be extensible.
+Goal: deliver listings competitive (cars & parts); start lean, be extensible.
 
 ## Data Model (Mongo)
 - title (string, required)
