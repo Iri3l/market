@@ -22,3 +22,8 @@ api._backup/
 .vercel
 .env*.local
 .env.vercel
+
+# envs
+.env
+.env.local
+api/.env
