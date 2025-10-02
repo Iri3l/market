@@ -25,7 +25,8 @@ const ListingSchema = new Schema<ListingDoc>(
   { timestamps: true }
 );
 
-// Reuse model in dev to avoid OverwriteModelError
-const ListingModel: Model<ListingDoc> = (models.Listing as Model<ListingDoc>) || model<ListingDoc>("Listing", ListingSchema);
+const ListingModel: Model<ListingDoc> =
+  (models.Listing as Model<ListingDoc>) || model<ListingDoc>("Listing", ListingSchema);
 
 export default ListingModel;
+export type { ListingDoc };

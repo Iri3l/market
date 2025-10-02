@@ -1,44 +1,56 @@
-import { NextResponse } from "next/server"
-import { connectMongo } from "../../../lib/db"
-import Listing from "../../../lib/models/Listing"
+import { NextResponse } from "next/server";
+import { connectMongo } from "../../../lib/db";
+import ListingModel, { type ListingDoc } from "../../../lib/models/Listing";
 
-export const runtime = "nodejs"
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function n(v: string | null, d: number) {
+  const x = Number(v ?? "");
+  return Number.isFinite(x) ? x : d;
+}
+function b(v: string | null) {
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return undefined;
+}
 
 export async function GET(req: Request) {
-  try {
-    const url = new URL(req.url)
-    const q        = url.searchParams.get("q")
-    const make     = url.searchParams.get("make")
-    const model    = url.searchParams.get("model")
-    const priceMin = url.searchParams.get("priceMin")
-    const priceMax = url.searchParams.get("priceMax")
-    const partStr  = url.searchParams.get("part")
-    const page     = Number(url.searchParams.get("page") ?? 1)
-    const limit    = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 20)))
+  await connectMongo();
 
-    await connectMongo()
+  const url = new URL(req.url);
+  const sp = url.searchParams;
 
-    const filter: any = {}
-    if (q) filter.$text = { $search: String(q) }
-    if (make) filter.make = String(make)
-    if (model) filter.model = String(model)
-    if (priceMin) filter.price = { ...(filter.price || {}), $gte: Number(priceMin) }
-    if (priceMax) filter.price = { ...(filter.price || {}), $lte: Number(priceMax) }
-    if (partStr !== null) filter.part = partStr === "true"
+  const page = Math.max(1, n(sp.get("page"), 1));
+  const limit = Math.max(1, Math.min(50, n(sp.get("limit"), 20)));
+  const skip = (page - 1) * limit;
 
-    const skip = (Math.max(1, page) - 1) * limit
-    const [items, total] = await Promise.all([
-      ListingModel.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-      ListingModel.countDocuments(filter),
-    ])
+  const q = sp.get("q");
+  const part = b(sp.get("part"));
+  const filter: Record<string, any> = {};
 
-    return NextResponse.json({
-      items,
-      total,
-      page: Math.max(1, page),
-      pages: Math.ceil(total / limit),
-    })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || "listings failed" }, { status: 500 })
+  if (q) {
+    filter.$or = [
+      { title: { $regex: q, $options: "i" } },
+      { make: { $regex: q, $options: "i" } },
+      { model: { $regex: q, $options: "i" } },
+    ];
   }
+  if (typeof part === "boolean") filter.part = part;
+
+  const [items, total] = await Promise.all([
+    ListingModel.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean<ListingDoc[]>(),
+    ListingModel.countDocuments(filter),
+  ]);
+
+  return NextResponse.json({
+    items,
+    total,
+    page,
+    pages: Math.max(1, Math.ceil(total / limit)),
+  });
 }
