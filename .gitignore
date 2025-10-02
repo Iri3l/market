@@ -27,3 +27,6 @@ api._backup/
 .env
 .env.local
 api/.env
+
+# backups
+*.bak

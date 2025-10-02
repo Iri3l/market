@@ -12,17 +12,9 @@ type Listing = {
 }
 
 async function fetchListings(search: string) {
-  const res = await fetch(
-    `http://localhost:4000/api/listings${search ? `?${search}` : ""}`,
-    { cache: "no-store" }
-  )
+  const res = await fetch(`/api/proxy/listings${search ? `?${search}` : ""}`, { cache: "no-store" })
   if (!res.ok) throw new Error(`Failed to load listings: ${res.status}`)
-  return res.json() as Promise<{
-    items: Listing[]
-    total: number
-    page: number
-    pages: number
-  }>
+  return res.json() as Promise<{ items: any[]; total: number; page: number; pages: number }>;
 }
 
 export default async function ListingsPage({
