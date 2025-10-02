@@ -35,3 +35,8 @@ api/.env
 .env
 .env.local
 api/.env
+
+# envs
+.env
+.env.local
+api/.env
